@@ -90,10 +90,42 @@
   .finish-total-label { font-size: 14px; color: var(--text2); margin-top: 6px; }
   .sets-result { display: flex; gap: 8px; justify-content: center; margin-top: 20px; flex-wrap: wrap; }
   .set-result-pill { background: var(--surface2); border-radius: 100px; padding: 6px 14px; font-size: 15px; font-family: var(--font-mono); font-weight: 500; color: var(--text); }
+  .set-result-pill.missed { background: #fae8e8; color: #a32d2d; }
+  @media (prefers-color-scheme: dark) { .set-result-pill.missed { background: #3d1a1a; color: #f09595; } }
+  #finishStatus { font-size: 15px; color: var(--text2); margin-top: 8px; }
   .next-workout-card { background: var(--surface2); border-radius: 14px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
   .next-workout-label { font-size: 13px; color: var(--text2); margin-bottom: 3px; }
   .next-workout-val { font-size: 15px; font-weight: 500; color: var(--text); }
   .next-sets-preview { font-size: 14px; font-family: var(--font-mono); color: var(--text2); }
+
+  /* STREAK */
+  .streak-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 18px 24px;
+    border: 1px solid var(--border);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .streak-icon { font-size: 44px; line-height: 1; flex-shrink: 0; transition: transform 0.3s ease; }
+  .streak-icon.bounce { animation: sbounce 0.4s ease; }
+  @keyframes sbounce { 0%{transform:scale(1)} 40%{transform:scale(1.3)} 100%{transform:scale(1)} }
+  .streak-info { flex: 1; }
+  .streak-count { font-size: 36px; font-weight: 300; font-family: var(--font-mono); color: var(--text); line-height: 1; }
+  .streak-label { font-size: 12px; color: var(--text2); margin-top: 3px; font-family: var(--font-mono); letter-spacing: 0.06em; }
+  .streak-sub { font-size: 11px; color: var(--text2); margin-top: 6px; }
+  /* DEBUG */
+  .debug-overlay { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); padding: 16px 20px 32px; z-index: 100; transform: translateY(100%); transition: transform 0.3s ease; }
+  .debug-overlay.open { transform: translateY(0); }
+  .debug-title { font-size: 11px; color: var(--text2); font-family: var(--font-mono); letter-spacing: 0.1em; margin-bottom: 12px; }
+  .debug-btns { display: flex; flex-direction: column; gap: 8px; }
+  .dbtn { padding: 12px 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 13px; font-family: var(--font-mono); cursor: pointer; text-align: left; }
+  .dbtn:active { opacity: 0.7; }
+  .debug-close { margin-top: 10px; width: 100%; padding: 12px; border-radius: 12px; border: none; background: var(--ring-fill); color: var(--btn-primary-text); font-size: 14px; font-family: var(--font-sans); cursor: pointer; }
+
+
 </style>
 </head>
 <body>
@@ -106,6 +138,14 @@
 
 <!-- МЕНЮ -->
 <div class="screen active" id="screenMenu">
+  <div class="streak-card" id="streakCard">
+    <div class="streak-icon" id="streakIcon">🔥</div>
+    <div class="streak-info">
+      <div class="streak-count" id="streakCount">0</div>
+      <div class="streak-label" id="streakLabel">НЕДЕЛЬ ПОДРЯД</div>
+      <div class="streak-sub" id="streakSub">Сделай 2 тренировки на этой неделе</div>
+    </div>
+  </div>
   <div class="menu-hero">
     <div class="menu-session-label" id="menuSessionLabel">ЗАНЯТИЕ 1</div>
     <div style="font-size:14px;color:var(--text2);margin-bottom:4px;">план тренировки</div>
@@ -182,6 +222,7 @@
   <div class="finish-hero">
     <div class="finish-total" id="finishTotal">5</div>
     <div class="finish-total-label">повторений за тренировку</div>
+    <div id="finishStatus"></div>
     <div class="sets-result" id="setsResult"></div>
   </div>
   <div class="next-workout-card">
@@ -223,35 +264,41 @@ function speakReps(n) {
   window.speechSynthesis.speak(utt);
 }
 
-const PLAN = {
-  "1-1":[1,1,1,1,1],"1-2":[1,1,1,1,1],"1-3":[1,1,1,1,1],
-  "2-1":[1,1,2,1,1],"2-2":[1,1,2,1,1],"2-3":[1,2,2,1,1],
-  "3-1":[2,1,2,1,2],"3-2":[2,1,2,1,2],"3-3":[2,2,2,1,2],
-  "4-1":[2,2,2,1,2],"4-2":[2,2,2,2,2],"4-3":[2,2,2,2,2],
-  "5-1":[2,2,2,2,2],"5-2":[3,2,2,2,2],"5-3":[3,2,2,2,2],
-  "6-1":[3,2,2,2,2],"6-2":[3,2,3,2,2],"6-3":[3,2,3,2,2],
-  "7-1":[3,2,3,2,2],"7-2":[3,3,3,2,2],"7-3":[3,3,3,2,3],
-  "8-1":[3,3,3,2,3],"8-2":[3,3,3,3,3],"8-3":[3,3,3,3,3],
-};
 const REST = 60;
 const CIRC = 2 * Math.PI * 95;
+const DEFAULT_SETS = [1, 1, 2, 2, 1];
 
-let state = JSON.parse(localStorage.getItem('marathon_state') || 'null') || {
-  week: 1, day: 1, totalReps: 0, totalWorkouts: 0, history: []
-};
+// Получаем план из Telegram initData или из localStorage
+function loadState() {
+  const saved = JSON.parse(localStorage.getItem('marathon_state_v2') || 'null');
+  if (saved) return saved;
+  return { sets: DEFAULT_SETS, totalReps: 0, totalWorkouts: 0, history: [] };
+}
+
+let state = loadState();
 if (!state.history) state.history = [];
+// streak fields
+if (!state.streak) state.streak = 0;
+if (!state.streakStatus) state.streakStatus = 'fire'; // 'fire' | 'ice'
+if (!state.currentWeekStart) state.currentWeekStart = getWeekStart(new Date());
+if (!state.currentWeekWorkouts) state.currentWeekWorkouts = 0;
+if (!state.iceSince) state.iceSince = null;
+
+// Если мини-апп открыт через Telegram — пробуем получить план из initData
+if (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) {
+  try {
+    const param = atob(tg.initDataUnsafe.start_param);
+    const parsed = JSON.parse(param);
+    if (parsed.sets) state.sets = parsed.sets;
+  } catch(e) {}
+}
 
 let workout = { sets: [], currentSet: 0, results: [], currentReps: 1 };
 let timerInterval = null;
 let timerSeconds = 0;
 
-function save() { localStorage.setItem('marathon_state', JSON.stringify(state)); }
-function getSets(w, d) { return PLAN[`${w}-${d}`] || [1,1,1,1,1]; }
-function nextDay(w, d) {
-  d++; if (d > 3) { d = 1; w++; } if (w > 8) { w = 8; d = 3; }
-  return [w, d];
-}
-function sessionNumber() { return state.totalWorkouts + 1; }
+function save() { localStorage.setItem('marathon_state_v2', JSON.stringify(state)); }
+
 function formatDate(iso) {
   const d = new Date(iso);
   return `${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}`;
@@ -269,6 +316,184 @@ function updateSetsTrack(sets, current) {
     d.className = 'set-dot' + (i < current ? ' done' : i === current ? ' active' : '');
     t.appendChild(d);
   });
+}
+
+// ---- STREAK LOGIC ----
+
+function getWeekStart(date) {
+  const d = new Date(date);
+  const day = d.getDay(); // 0=sun
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday
+  d.setDate(diff);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString().split('T')[0];
+}
+
+function checkStreakOnOpen() {
+  const today = new Date();
+  const todayWeekStart = getWeekStart(today);
+  const savedWeekStart = state.currentWeekStart;
+
+  if (savedWeekStart === todayWeekStart) return; // та же неделя — ничего не делаем
+
+  // Новая неделя наступила
+  const savedWeekDone = state.currentWeekWorkouts >= 2;
+
+  if (state.streakStatus === 'fire') {
+    if (savedWeekDone) {
+      // Прошлая неделя выполнена — стрик продолжается, начинаем новую
+      state.currentWeekStart = todayWeekStart;
+      state.currentWeekWorkouts = 0;
+    } else {
+      // Прошлая неделя провалена — переходим в лёд
+      state.streakStatus = 'ice';
+      state.iceSince = savedWeekStart; // фиксируем с какой недели лёд
+      state.currentWeekStart = todayWeekStart;
+      state.currentWeekWorkouts = 0;
+    }
+  } else if (state.streakStatus === 'ice') {
+    // Проверяем: iceStart + 3 дня
+    const iceDate = new Date(state.iceSince);
+    const graceDays = 3;
+    const graceEnd = new Date(iceDate);
+    graceEnd.setDate(graceEnd.getDate() + 7 + graceDays); // конец прошлой недели + 3 дня
+    if (today > graceEnd) {
+      // Грейс истёк — обнуляем
+      state.streak = 0;
+      state.streakStatus = 'fire';
+      state.iceSince = null;
+      state.currentWeekStart = todayWeekStart;
+      state.currentWeekWorkouts = 0;
+    } else {
+      state.currentWeekStart = todayWeekStart;
+    }
+  }
+  save();
+}
+
+function onWorkoutCompletedStreak() {
+  const todayWeekStart = getWeekStart(new Date());
+
+  // Если неделя сменилась — синхронизируем счётчик недели
+  if (state.currentWeekStart !== todayWeekStart) {
+    state.currentWeekStart = todayWeekStart;
+    state.currentWeekWorkouts = 0;
+  }
+
+  state.currentWeekWorkouts++;
+
+  if (state.streakStatus === 'ice') {
+    // Тренировка во время льда — разжигаем заново
+    state.streakStatus = 'fire';
+    state.iceSince = null;
+    state.streak = 1;
+  } else {
+    // Каждая выполненная тренировка добавляет +1 к счётчику
+    state.streak++;
+  }
+  save();
+}
+
+function renderStreak() {
+  checkStreakOnOpen();
+
+  const icon = document.getElementById('streakIcon');
+  const count = document.getElementById('streakCount');
+  const label = document.getElementById('streakLabel');
+  const sub = document.getElementById('streakSub');
+  const isIce = state.streakStatus === 'ice';
+  icon.textContent = isIce ? '🧊' : '🔥';
+  count.textContent = state.streak;
+  label.textContent = isIce ? 'ЗАМОРОЖЕН' : 'ТРЕНИРОВОК ПОДРЯД';
+
+  if (isIce) {
+    sub.textContent = 'Сделай тренировку чтобы разжечь огонь снова';
+  } else {
+    sub.textContent = 'Делай 2 тренировки в неделю чтобы не погас';
+  }
+}
+
+// ---- END STREAK LOGIC ----
+
+// ---- DEBUG ----
+let debugPressTimer = null;
+
+function initDebugPress() {
+  const card = document.getElementById('streakCard');
+  card.addEventListener('touchstart', () => {
+    debugPressTimer = setTimeout(() => openDebug(), 5000);
+  });
+  card.addEventListener('touchend', () => clearTimeout(debugPressTimer));
+  card.addEventListener('touchmove', () => clearTimeout(debugPressTimer));
+  // также по долгому клику мышью (для браузера)
+  card.addEventListener('mousedown', () => {
+    debugPressTimer = setTimeout(() => openDebug(), 5000);
+  });
+  card.addEventListener('mouseup', () => clearTimeout(debugPressTimer));
+}
+
+function openDebug() {
+  document.getElementById('debugOverlay').classList.add('open');
+  if (tg) tg.HapticFeedback?.impactOccurred('heavy');
+}
+function closeDebug() {
+  document.getElementById('debugOverlay').classList.remove('open');
+}
+
+function dbAddWorkout() {
+  onWorkoutCompletedStreak();
+  closeDebug();
+  renderStreak();
+}
+function dbNextWeekSuccess() {
+  // Симулируем: прошлая неделя была с 2 тренировками, наступила новая
+  state.currentWeekWorkouts = 2;
+  const fakeNextMonday = new Date();
+  fakeNextMonday.setDate(fakeNextMonday.getDate() + 7);
+  state.currentWeekStart = getWeekStart(fakeNextMonday) + '_fake_' + Date.now();
+  // checkStreakOnOpen сработает при следующем рендере, симулируем вручную
+  state.streak++;
+  state.currentWeekStart = getWeekStart(new Date());
+  state.currentWeekWorkouts = 0;
+  save();
+  closeDebug();
+  renderStreak();
+}
+function dbNextWeekFail() {
+  // Симулируем: неделя прошла без 2 тренировок
+  state.currentWeekWorkouts = 0;
+  state.streakStatus = 'ice';
+  state.iceSince = getWeekStart(new Date());
+  state.currentWeekStart = getWeekStart(new Date());
+  state.currentWeekWorkouts = 0;
+  save();
+  closeDebug();
+  renderStreak();
+}
+function dbEndGrace() {
+  // Симулируем: грейс истёк — обнуляем
+  state.streak = 0;
+  state.streakStatus = 'fire';
+  state.iceSince = null;
+  state.currentWeekWorkouts = 0;
+  save();
+  closeDebug();
+  renderStreak();
+}
+function dbReset() {
+  state.streak = 0;
+  state.streakStatus = 'fire';
+  state.iceSince = null;
+  state.currentWeekStart = getWeekStart(new Date());
+  state.currentWeekWorkouts = 0;
+  save();
+  closeDebug();
+  renderStreak();
+}
+// ---- END DEBUG ----
+
+function setSetsTrackVisible(visible) {
+  document.getElementById('setsTrack').style.display = visible ? 'flex' : 'none';
 }
 
 function renderChart() {
@@ -319,7 +544,7 @@ function showScreen(id) {
 
 function goMenu() {
   clearInterval(timerInterval);
-  const sets = getSets(state.week, state.day);
+  const sets = state.sets;
   const num = state.totalWorkouts + 1;
   document.getElementById('menuSessionLabel').textContent = `ЗАНЯТИЕ ${num}`;
   document.getElementById('menuSets').textContent = sets.join(' · ');
@@ -327,13 +552,16 @@ function goMenu() {
   updateSetsTrack(sets, 0);
   updateHeader();
   renderChart();
+  renderStreak();
+  setSetsTrackVisible(false);
   showScreen('screenMenu');
 }
 
 function startWorkout() {
-  const sets = getSets(state.week, state.day);
-  workout = { sets, currentSet: 0, results: [], currentReps: sets[0] };
+  const sets = state.sets;
+  workout = { sets: sets.slice(), currentSet: 0, results: [], currentReps: sets[0] };
   updateSetsTrack(sets, 0);
+  setSetsTrackVisible(true);
   showSetScreen();
   showScreen('screenWorkout');
 }
@@ -366,22 +594,42 @@ function markDone() {
   showRestScreen(reps);
 }
 
+let timerEndTime = null; // абсолютное время конца отдыха
+
 function showRestScreen(doneReps) {
   const next = workout.sets[workout.currentSet];
   document.getElementById('nextSetVal').textContent = `${next} повт.`;
   updateSetsTrack(workout.sets, workout.currentSet);
   showScreen('screenRest');
+
+  // Отправляем боту сигнал — он пришлёт пуш через REST секунд
+  if (tg && tg.sendData) {
+    try {
+      tg.sendData(JSON.stringify({
+        type: 'rest_started',
+        next_reps: next,
+        rest_seconds: REST,
+      }));
+    } catch(e) {}
+  }
+
   startTimer();
 }
 
 function startTimer() {
   clearInterval(timerInterval);
+  timerEndTime = Date.now() + REST * 1000;
   timerSeconds = REST;
   updateTimerUI(timerSeconds);
+
   timerInterval = setInterval(() => {
-    timerSeconds--;
+    // Считаем по реальному времени — работает корректно после сворачивания
+    const remaining = Math.round((timerEndTime - Date.now()) / 1000);
+    const prev = timerSeconds;
+    timerSeconds = Math.max(0, remaining);
     updateTimerUI(timerSeconds);
-    if (timerSeconds === 3 || timerSeconds === 2 || timerSeconds === 1) {
+
+    if (timerSeconds <= 3 && timerSeconds > 0 && timerSeconds !== prev) {
       beepTick();
       if (tg) tg.HapticFeedback?.impactOccurred('light');
     }
@@ -392,8 +640,26 @@ function startTimer() {
       showSetScreen();
       showScreen('screenWorkout');
     }
-  }, 1000);
+  }, 500); // тикаем каждые 500мс для точности
 }
+
+// Page Visibility API — когда возвращаемся после сворачивания
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && timerEndTime) {
+    const remaining = Math.round((timerEndTime - Date.now()) / 1000);
+    if (remaining <= 0) {
+      // Время уже вышло пока были свёрнуты — сразу показываем подход
+      clearInterval(timerInterval);
+      timerEndTime = null;
+      beepReady();
+      showSetScreen();
+      showScreen('screenWorkout');
+    } else {
+      timerSeconds = remaining;
+      updateTimerUI(timerSeconds);
+    }
+  }
+});
 
 function updateTimerUI(sec) {
   const progress = sec / REST;
@@ -413,27 +679,45 @@ function finishWorkout() {
   const total = workout.results.reduce((a,b)=>a+b,0);
   const sessionNum = state.totalWorkouts + 1;
 
+  // Определяем выполнена ли тренировка полностью
+  const completed = workout.sets.every((plan, i) => workout.results[i] >= plan);
+
+  // Обновляем стрик
+  if (completed) onWorkoutCompletedStreak();
+
+  // Отправляем результат в бот если открыто через Telegram
+  if (tg && tg.sendData) {
+    try {
+      tg.sendData(JSON.stringify({
+        sets_plan: workout.sets,
+        sets_done: workout.results,
+      }));
+    } catch(e) {}
+  }
+
+  // Обновляем локальный стейт
   state.totalReps += total;
   state.totalWorkouts++;
-  state.history.push({ session: sessionNum, total, date: new Date().toISOString() });
-
-  const [nw, nd] = nextDay(state.week, state.day);
-  state.week = nw; state.day = nd;
+  state.history.push({ session: sessionNum, total, completed, date: new Date().toISOString() });
   save();
 
   document.getElementById('finishTotal').textContent = total;
   const sr = document.getElementById('setsResult');
   sr.innerHTML = '';
-  workout.results.forEach(r => {
+  workout.results.forEach((r, i) => {
     const p = document.createElement('div');
-    p.className = 'set-result-pill';
+    p.className = 'set-result-pill' + (r < workout.sets[i] ? ' missed' : '');
     p.textContent = r;
     sr.appendChild(p);
   });
 
-  const nextSets = getSets(nw, nd);
+  const mark = completed ? '✅' : '🔄';
+  document.getElementById('finishStatus').textContent = completed
+    ? 'Отлично, план выполнен!'
+    : 'Не всё вышло — повторим';
+
   document.getElementById('nextWorkoutLabel').textContent = `Занятие ${state.totalWorkouts + 1}`;
-  document.getElementById('nextSetsPreview').textContent = nextSets.join('·');
+  document.getElementById('nextSetsPreview').textContent = completed ? 'бот обновит план' : state.sets.join('·');
   updateSetsTrack(workout.sets, workout.sets.length);
   updateHeader();
   showScreen('screenFinish');
@@ -441,6 +725,19 @@ function finishWorkout() {
 }
 
 goMenu();
+initDebugPress();
 </script>
+<div class="debug-overlay" id="debugOverlay">
+  <div class="debug-title">🛠 ОТЛАДКА СТРИКА</div>
+  <button class="debug-close" onclick="closeDebug()" style="margin-bottom:12px;">✕ Закрыть</button>
+  <div class="debug-btns">
+    <button class="dbtn" onclick="dbAddWorkout()">+ Добавить тренировку на этой неделе</button>
+    <button class="dbtn" onclick="dbNextWeekSuccess()">⏩ Перейти к след. неделе (2 тренировки выполнено)</button>
+    <button class="dbtn" onclick="dbNextWeekFail()">⏩ Перейти к след. неделе (0 тренировок)</button>
+    <button class="dbtn" onclick="dbEndGrace()">🧊 Завершить грейс-период (обнулить)</button>
+    <button class="dbtn" onclick="dbReset()">🗑 Сбросить стрик полностью</button>
+  </div>
+</div>
+
 </body>
 </html>
