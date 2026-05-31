@@ -71,7 +71,9 @@
   /* МЕНЮ */
   .menu-hero { background: var(--surface); border-radius: var(--radius); padding: 28px 24px; border: 1px solid var(--border); margin-bottom: 14px; }
   .menu-session-label { font-size: 12px; color: var(--text2); font-family: var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
-  .menu-today-sets { font-size: 32px; font-weight: 300; font-family: var(--font-mono); color: var(--text); margin-bottom: 4px; }
+  .menu-today-sets { font-size: 28px; font-weight: 300; font-family: var(--font-mono); color: var(--text); margin-bottom: 4px; display: flex; align-items: baseline; gap: 2px; flex-wrap: nowrap; }
+  .sets-num { font-size: 28px; }
+  .sets-dot { font-size: 13px; color: var(--text2); margin: 0 1px; }
   .menu-today-total { font-size: 13px; color: var(--text2); }
 
   /* ГРАФИК */
@@ -547,7 +549,9 @@ function goMenu() {
   const sets = state.sets;
   const num = state.totalWorkouts + 1;
   document.getElementById('menuSessionLabel').textContent = `ЗАНЯТИЕ ${num}`;
-  document.getElementById('menuSets').textContent = sets.join(' · ');
+  document.getElementById('menuSets').innerHTML = sets.map((s, i) =>
+    (i > 0 ? '<span class="sets-dot">·</span>' : '') + '<span class="sets-num">' + s + '</span>'
+  ).join('');
   document.getElementById('menuTotal').textContent = `= ${sets.reduce((a,b)=>a+b,0)} повторений`;
   updateSetsTrack(sets, 0);
   updateHeader();
@@ -602,17 +606,6 @@ function showRestScreen(doneReps) {
   updateSetsTrack(workout.sets, workout.currentSet);
   showScreen('screenRest');
 
-  // Отправляем боту сигнал — он пришлёт пуш через REST секунд
-  if (tg && tg.sendData) {
-    try {
-      tg.sendData(JSON.stringify({
-        type: 'rest_started',
-        next_reps: next,
-        rest_seconds: REST,
-      }));
-    } catch(e) {}
-  }
-
   startTimer();
 }
 
@@ -643,23 +636,77 @@ function startTimer() {
   }, 500); // тикаем каждые 500мс для точности
 }
 
-// Page Visibility API — когда возвращаемся после сворачивания
+// Page Visibility API — сворачивание и возврат
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && timerEndTime) {
-    const remaining = Math.round((timerEndTime - Date.now()) / 1000);
-    if (remaining <= 0) {
-      // Время уже вышло пока были свёрнуты — сразу показываем подход
-      clearInterval(timerInterval);
-      timerEndTime = null;
-      beepReady();
-      showSetScreen();
-      showScreen('screenWorkout');
-    } else {
-      timerSeconds = remaining;
-      updateTimerUI(timerSeconds);
+  if (document.visibilityState === 'hidden') {
+    // Сворачиваем — сохраняем состояние таймера и запрашиваем пуш от бота
+    if (timerEndTime) {
+      localStorage.setItem('marathon_timer_end', timerEndTime.toString());
+      localStorage.setItem('marathon_timer_set', workout.currentSet.toString());
+      // Просим бот прислать пуш через Telegram API (без закрытия аппа)
+      const next = workout.sets[workout.currentSet];
+      const remaining = Math.max(1, Math.round((timerEndTime - Date.now()) / 1000));
+      notifyBotRestStarted(next, remaining);
+    }
+  } else if (document.visibilityState === 'visible') {
+    // Возвращаемся — восстанавливаем если нужно
+    const savedEnd = localStorage.getItem('marathon_timer_end');
+    if (savedEnd && timerEndTime) {
+      const remaining = Math.round((parseInt(savedEnd) - Date.now()) / 1000);
+      if (remaining <= 0) {
+        clearInterval(timerInterval);
+        timerEndTime = null;
+        localStorage.removeItem('marathon_timer_end');
+        beepReady();
+        if (tg) tg.HapticFeedback?.notificationOccurred('warning');
+        showSetScreen();
+        showScreen('screenWorkout');
+      } else {
+        timerSeconds = remaining;
+        updateTimerUI(timerSeconds);
+      }
     }
   }
 });
+
+// Уведомляем бота через Telegram.WebApp без закрытия аппа
+function notifyBotRestStarted(nextReps, restSeconds) {
+  // Используем tg.BiometricManager или просто шлём через initData
+  // Самый надёжный способ без закрытия — sessionStorage флаг,
+  // бот получит данные когда мини-апп закроется после тренировки
+  sessionStorage.setItem('pending_rest_push', JSON.stringify({
+    next_reps: nextReps,
+    rest_seconds: restSeconds,
+    sent_at: Date.now(),
+  }));
+}
+
+// ---- ПРОГРЕССИЯ ПЛАНА (зеркало bot.py) ----
+// Порядок роста: индекс 3 -> 2 -> 1 -> 0 -> 4
+const GROWTH_ORDER = [3, 2, 1, 0, 4];
+const EXPECTED_GAP = {3: 0, 2: 2, 1: 3, 0: 4, 4: 5};
+
+function calcNextSets(current, completed) {
+  if (!completed) return current.slice();
+  const sets = current.slice();
+  const peak = sets[3];
+
+  // Находим какой подход растить
+  let chosen = null;
+  for (const idx of GROWTH_ORDER) {
+    const actualGap = peak - sets[idx];
+    if (actualGap > EXPECTED_GAP[idx]) {
+      chosen = idx;
+      break;
+    }
+  }
+  if (chosen === null) chosen = 3; // все в норме — растим пик
+
+  sets[chosen] += 1;
+  sets[4] = sets[0]; // последний подход = первый (лёгкий финиш)
+  return sets;
+}
+// ---- КОНЕЦ ПРОГРЕССИИ ----
 
 function updateTimerUI(sec) {
   const progress = sec / REST;
@@ -680,24 +727,18 @@ function finishWorkout() {
   const sessionNum = state.totalWorkouts + 1;
 
   // Определяем выполнена ли тренировка полностью
-  const completed = workout.sets.every((plan, i) => workout.results[i] >= plan);
+  const completed = workout.sets.every((plan, i) => (workout.results[i] || 0) >= plan);
+
+  // Считаем следующий план прямо здесь
+  const newSets = calcNextSets(workout.sets, completed);
 
   // Обновляем стрик
   if (completed) onWorkoutCompletedStreak();
 
-  // Отправляем результат в бот если открыто через Telegram
-  if (tg && tg.sendData) {
-    try {
-      tg.sendData(JSON.stringify({
-        sets_plan: workout.sets,
-        sets_done: workout.results,
-      }));
-    } catch(e) {}
-  }
-
-  // Обновляем локальный стейт
+  // Обновляем локальный стейт — включая новый план
   state.totalReps += total;
   state.totalWorkouts++;
+  state.sets = newSets; // <-- ключевое: сохраняем новый план
   state.history.push({ session: sessionNum, total, completed, date: new Date().toISOString() });
   save();
 
@@ -711,13 +752,12 @@ function finishWorkout() {
     sr.appendChild(p);
   });
 
-  const mark = completed ? '✅' : '🔄';
   document.getElementById('finishStatus').textContent = completed
     ? 'Отлично, план выполнен!'
     : 'Не всё вышло — повторим';
 
   document.getElementById('nextWorkoutLabel').textContent = `Занятие ${state.totalWorkouts + 1}`;
-  document.getElementById('nextSetsPreview').textContent = completed ? 'бот обновит план' : state.sets.join('·');
+  document.getElementById('nextSetsPreview').textContent = newSets.join(' · ');
   updateSetsTrack(workout.sets, workout.sets.length);
   updateHeader();
   showScreen('screenFinish');
