@@ -161,6 +161,7 @@
   </div>
 
   <button class="btn btn-primary" onclick="startWorkout()">Начать тренировку</button>
+  <button class="btn btn-secondary" onclick="openDebug()" style="font-size:13px;opacity:0.5;">🛠 Отладка</button>
 </div>
 
 <!-- ТРЕНИРОВКА -->
@@ -385,12 +386,12 @@ function onWorkoutCompletedStreak() {
   state.currentWeekWorkouts++;
 
   if (state.streakStatus === 'ice') {
-    // Тренировка во время льда — разжигаем заново
+    // Тренировка во время льда — разжигаем, стрик продолжается (не сбрасывается)
     state.streakStatus = 'fire';
     state.iceSince = null;
-    state.streak = 1;
+    // streak не трогаем — просто +1 как обычно
+    state.streak++;
   } else {
-    // Каждая выполненная тренировка добавляет +1 к счётчику
     state.streak++;
   }
   save();
@@ -403,16 +404,25 @@ function renderStreak() {
   const count = document.getElementById('streakCount');
   const label = document.getElementById('streakLabel');
   const sub = document.getElementById('streakSub');
-  const isIce = state.streakStatus === 'ice';
-  icon.textContent = isIce ? '🧊' : '🔥';
-  count.textContent = state.streak;
-  label.textContent = isIce ? 'ЗАМОРОЖЕН' : 'ТРЕНИРОВОК ПОДРЯД';
 
-  if (isIce) {
-    sub.textContent = 'Сделай тренировку чтобы разжечь огонь снова';
+  const isIce = state.streakStatus === 'ice';
+  const isEmpty = state.streak === 0 && !isIce;
+
+  if (isEmpty) {
+    icon.textContent = '🌱';
+    label.textContent = 'СТРИК ЕЩЁ НЕ НАЧАЛСЯ';
+    sub.textContent = 'Проведи первую тренировку';
+  } else if (isIce) {
+    icon.textContent = '🧊';
+    label.textContent = 'ЗАМОРОЖЕН';
+    sub.textContent = 'Сделай тренировку — стрик продолжится';
   } else {
+    icon.textContent = '🔥';
+    label.textContent = 'ТРЕНИРОВОК ПОДРЯД';
     sub.textContent = 'Делай 2 тренировки в неделю чтобы не погас';
   }
+
+  count.textContent = state.streak;
 }
 
 // ---- END STREAK LOGIC ----
@@ -420,19 +430,7 @@ function renderStreak() {
 // ---- DEBUG ----
 let debugPressTimer = null;
 
-function initDebugPress() {
-  const card = document.getElementById('streakCard');
-  card.addEventListener('touchstart', () => {
-    debugPressTimer = setTimeout(() => openDebug(), 5000);
-  });
-  card.addEventListener('touchend', () => clearTimeout(debugPressTimer));
-  card.addEventListener('touchmove', () => clearTimeout(debugPressTimer));
-  // также по долгому клику мышью (для браузера)
-  card.addEventListener('mousedown', () => {
-    debugPressTimer = setTimeout(() => openDebug(), 5000);
-  });
-  card.addEventListener('mouseup', () => clearTimeout(debugPressTimer));
-}
+function initDebugPress() {}
 
 function openDebug() {
   document.getElementById('debugOverlay').classList.add('open');
