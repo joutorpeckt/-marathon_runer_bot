@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Марафонец</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f4f0; --surface: #ffffff; --surface2: #f0efe9;
+    --text: #1a1a1a; --text2: #888880;
+    --ring-bg: #e8e7e0; --ring-fill: #1a1a1a;
+    --btn-primary: #1a1a1a; --btn-primary-text: #f5f4f0;
+    --btn-secondary: #f0efe9; --btn-secondary-text: #1a1a1a;
+    --border: rgba(0,0,0,0.08); --radius: 20px;
+    --font-mono: 'DM Mono', monospace; --font-sans: 'DM Sans', sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111110; --surface: #1c1c1a; --surface2: #252522;
+      --text: #f0efe9; --text2: #666660;
+      --ring-bg: #2a2a28; --ring-fill: #f0efe9;
+      --btn-primary: #f0efe9; --btn-primary-text: #111110;
+      --btn-secondary: #252522; --btn-secondary-text: #f0efe9;
+      --border: rgba(255,255,255,0.07);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: var(--font-sans); background: var(--bg); color: var(--text); min-height: 100vh; padding: 0 0 32px; user-select: none; }
+
+  .header { padding: 20px 20px 12px; display: flex; justify-content: space-between; align-items: center; }
+  .header-title { font-size: 13px; font-weight: 500; color: var(--text2); letter-spacing: 0.08em; text-transform: uppercase; font-family: var(--font-mono); }
+  .header-right { font-size: 13px; font-weight: 500; color: var(--text2); font-family: var(--font-mono); }
+
+  .sets-track { display: flex; gap: 6px; padding: 0 20px 20px; align-items: center; }
+  .set-dot { flex: 1; height: 4px; border-radius: 2px; background: var(--ring-bg); transition: background 0.3s ease; }
+  .set-dot.done { background: var(--ring-fill); }
+  .set-dot.active { background: var(--ring-fill); opacity: 0.4; }
+
+  .screen { display: none; padding: 0 20px; }
+  .screen.active { display: block; }
+
+  .circle-area { display: flex; align-items: center; justify-content: center; margin-bottom: 20px; }
+  .side-btn {
+    width: 64px; height: 64px; border-radius: 50%;
+    border: 1.5px solid var(--border); background: var(--surface); color: var(--text);
+    font-size: 28px; font-weight: 300; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex-shrink: 0; transition: background 0.15s, transform 0.1s; font-family: var(--font-mono);
+  }
+  .side-btn:active { background: var(--surface2); transform: scale(0.93); }
+  .circle-tap { width: 220px; height: 220px; cursor: pointer; flex-shrink: 0; margin: 0 12px; position: relative; }
+  .circle-tap:active .tap-inner { transform: scale(0.96); }
+  .tap-inner { transition: transform 0.12s; }
+  .circle-hint { font-size: 12px; color: var(--text2); text-align: center; font-family: var(--font-mono); letter-spacing: 0.06em; margin-bottom: 24px; }
+
+  .set-info { background: var(--surface); border-radius: var(--radius); padding: 18px 22px; border: 1px solid var(--border); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+  .set-info-label { font-size: 12px; color: var(--text2); font-family: var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
+  .set-info-val { font-size: 22px; font-weight: 300; font-family: var(--font-mono); color: var(--text); }
+
+  .next-set-hint { background: var(--surface2); border-radius: 12px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .next-set-hint-label { font-size: 13px; color: var(--text2); }
+  .next-set-hint-val { font-size: 20px; font-weight: 500; font-family: var(--font-mono); color: var(--text); }
+
+  .btn { width: 100%; padding: 16px; border-radius: 14px; border: none; font-size: 16px; font-weight: 500; font-family: var(--font-sans); cursor: pointer; transition: opacity 0.15s, transform 0.1s; margin-bottom: 10px; }
+  .btn:active { opacity: 0.75; transform: scale(0.98); }
+  .btn-primary { background: var(--btn-primary); color: var(--btn-primary-text); }
+  .btn-secondary { background: var(--btn-secondary); color: var(--btn-secondary-text); }
+
+  /* МЕНЮ */
+  .menu-hero { background: var(--surface); border-radius: var(--radius); padding: 28px 24px; border: 1px solid var(--border); margin-bottom: 14px; }
+  .menu-session-label { font-size: 12px; color: var(--text2); font-family: var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+  .menu-today-sets { font-size: 32px; font-weight: 300; font-family: var(--font-mono); color: var(--text); margin-bottom: 4px; }
+  .menu-today-total { font-size: 13px; color: var(--text2); }
+
+  /* ГРАФИК */
+  .chart-card { background: var(--surface); border-radius: var(--radius); padding: 20px 20px 16px; border: 1px solid var(--border); margin-bottom: 14px; }
+  .chart-label { font-size: 12px; color: var(--text2); font-family: var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 16px; }
+  .chart-wrap { position: relative; height: 100px; display: flex; align-items: flex-end; gap: 5px; }
+  .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .bar { width: 100%; border-radius: 4px 4px 0 0; background: var(--ring-fill); opacity: 0.85; min-height: 3px; transition: height 0.4s ease; }
+  .bar-date { font-size: 9px; color: var(--text2); font-family: var(--font-mono); white-space: nowrap; }
+  .bar-val { font-size: 10px; color: var(--text2); font-family: var(--font-mono); }
+  .chart-empty { font-size: 13px; color: var(--text2); text-align: center; padding: 28px 0; }
+
+  /* ФИНИШ */
+  .finish-hero { background: var(--surface); border-radius: var(--radius); padding: 36px 24px 28px; border: 1px solid var(--border); margin-bottom: 14px; text-align: center; }
+  .finish-total { font-size: 88px; font-weight: 300; font-family: var(--font-mono); color: var(--text); line-height: 1; }
+  .finish-total-label { font-size: 14px; color: var(--text2); margin-top: 6px; }
+  .sets-result { display: flex; gap: 8px; justify-content: center; margin-top: 20px; flex-wrap: wrap; }
+  .set-result-pill { background: var(--surface2); border-radius: 100px; padding: 6px 14px; font-size: 15px; font-family: var(--font-mono); font-weight: 500; color: var(--text); }
+  .next-workout-card { background: var(--surface2); border-radius: 14px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .next-workout-label { font-size: 13px; color: var(--text2); margin-bottom: 3px; }
+  .next-workout-val { font-size: 15px; font-weight: 500; color: var(--text); }
+  .next-sets-preview { font-size: 14px; font-family: var(--font-mono); color: var(--text2); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <span class="header-title">Марафонец</span>
+  <span class="header-right" id="headerRight">ЗАНЯТИЕ 1</span>
+</div>
+<div class="sets-track" id="setsTrack"></div>
+
+<!-- МЕНЮ -->
+<div class="screen active" id="screenMenu">
+  <div class="menu-hero">
+    <div class="menu-session-label" id="menuSessionLabel">ЗАНЯТИЕ 1</div>
+    <div style="font-size:14px;color:var(--text2);margin-bottom:4px;">план тренировки</div>
+    <div class="menu-today-sets" id="menuSets">1 · 1 · 1 · 1 · 1</div>
+    <div class="menu-today-total" id="menuTotal">= 5 повторений</div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-label">Подтягивания по тренировкам</div>
+    <div id="chartWrap"></div>
+  </div>
+
+  <button class="btn btn-primary" onclick="startWorkout()">Начать тренировку</button>
+</div>
+
+<!-- ТРЕНИРОВКА -->
+<div class="screen" id="screenWorkout">
+  <div class="circle-area">
+    <div class="side-btn" onclick="adjustReps(-1)">−</div>
+    <div class="circle-tap" onclick="markDone()">
+      <svg class="tap-inner" width="220" height="220" viewBox="0 0 220 220">
+        <circle fill="none" stroke="var(--ring-bg)" stroke-width="10" cx="110" cy="110" r="95"/>
+        <circle id="workoutRing" fill="none" stroke="var(--ring-fill)" stroke-width="10"
+          stroke-linecap="round" cx="110" cy="110" r="95"
+          transform="rotate(-90 110 110)" stroke-dasharray="596.9" stroke-dashoffset="0"/>
+        <text id="workoutNum" x="110" y="104" text-anchor="middle" dominant-baseline="middle"
+          font-size="58" font-weight="300" fill="var(--text)" font-family="'DM Mono',monospace">1</text>
+        <text x="110" y="138" text-anchor="middle" dominant-baseline="middle"
+          font-size="12" fill="var(--text2)" font-family="'DM Sans',sans-serif" letter-spacing="1">повт.</text>
+      </svg>
+    </div>
+    <div class="side-btn" onclick="adjustReps(1)">+</div>
+  </div>
+  <div class="circle-hint">нажми на круг — выполнил</div>
+  <div class="set-info">
+    <div>
+      <div class="set-info-label">Подход</div>
+      <div class="set-info-val" id="setLabel">1 из 5</div>
+    </div>
+    <div style="text-align:right">
+      <div class="set-info-label">Уже сделано</div>
+      <div class="set-info-val" id="doneSoFar">0</div>
+    </div>
+  </div>
+</div>
+
+<!-- ОТДЫХ -->
+<div class="screen" id="screenRest">
+  <div class="circle-area">
+    <div style="width:64px;flex-shrink:0"></div>
+    <div class="circle-tap" onclick="skipRest()">
+      <svg class="tap-inner" width="220" height="220" viewBox="0 0 220 220">
+        <circle fill="none" stroke="var(--ring-bg)" stroke-width="10" cx="110" cy="110" r="95"/>
+        <circle id="timerRing" fill="none" stroke="var(--ring-fill)" stroke-width="10"
+          stroke-linecap="round" cx="110" cy="110" r="95"
+          transform="rotate(-90 110 110)" stroke-dasharray="596.9" stroke-dashoffset="0"/>
+        <text id="timerNum" x="110" y="100" text-anchor="middle" dominant-baseline="middle"
+          font-size="52" font-weight="300" fill="var(--text)" font-family="'DM Mono',monospace">60</text>
+        <text x="110" y="136" text-anchor="middle" dominant-baseline="middle"
+          font-size="12" fill="var(--text2)" font-family="'DM Sans',sans-serif" letter-spacing="1">секунд</text>
+      </svg>
+    </div>
+    <div style="width:64px;flex-shrink:0"></div>
+  </div>
+  <div class="circle-hint">нажми на круг — пропустить отдых</div>
+  <div class="next-set-hint">
+    <span class="next-set-hint-label">Следующий подход</span>
+    <span class="next-set-hint-val" id="nextSetVal">1 повт.</span>
+  </div>
+</div>
+
+<!-- ФИНИШ -->
+<div class="screen" id="screenFinish">
+  <div class="finish-hero">
+    <div class="finish-total" id="finishTotal">5</div>
+    <div class="finish-total-label">повторений за тренировку</div>
+    <div class="sets-result" id="setsResult"></div>
+  </div>
+  <div class="next-workout-card">
+    <div>
+      <div class="next-workout-label">следующее занятие</div>
+      <div class="next-workout-val" id="nextWorkoutLabel">Занятие 2</div>
+    </div>
+    <div class="next-sets-preview" id="nextSetsPreview">1·1·1·1·1</div>
+  </div>
+  <button class="btn btn-primary" onclick="goMenu()">В меню</button>
+</div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function beep(freq, duration, volume) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.type = 'sine'; osc.frequency.value = freq;
+  gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+  osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + duration);
+}
+function beepTick() { beep(880, 0.12, 0.4); }
+function beepReady() {
+  beep(1100, 0.08, 0.5);
+  setTimeout(() => beep(1100, 0.08, 0.5), 130);
+  setTimeout(() => beep(1400, 0.35, 0.6), 280);
+}
+function speakReps(n) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const words = ['', 'один', 'два', 'три', 'четыре', 'пять', 'шесть', 'семь', 'восемь', 'девять', 'десять'];
+  const utt = new SpeechSynthesisUtterance(words[n] || String(n));
+  utt.lang = 'ru-RU'; utt.rate = 0.9; utt.pitch = 1.1; utt.volume = 1;
+  window.speechSynthesis.speak(utt);
+}
+
+const PLAN = {
+  "1-1":[1,1,1,1,1],"1-2":[1,1,1,1,1],"1-3":[1,1,1,1,1],
+  "2-1":[1,1,2,1,1],"2-2":[1,1,2,1,1],"2-3":[1,2,2,1,1],
+  "3-1":[2,1,2,1,2],"3-2":[2,1,2,1,2],"3-3":[2,2,2,1,2],
+  "4-1":[2,2,2,1,2],"4-2":[2,2,2,2,2],"4-3":[2,2,2,2,2],
+  "5-1":[2,2,2,2,2],"5-2":[3,2,2,2,2],"5-3":[3,2,2,2,2],
+  "6-1":[3,2,2,2,2],"6-2":[3,2,3,2,2],"6-3":[3,2,3,2,2],
+  "7-1":[3,2,3,2,2],"7-2":[3,3,3,2,2],"7-3":[3,3,3,2,3],
+  "8-1":[3,3,3,2,3],"8-2":[3,3,3,3,3],"8-3":[3,3,3,3,3],
+};
+const REST = 60;
+const CIRC = 2 * Math.PI * 95;
+
+let state = JSON.parse(localStorage.getItem('marathon_state') || 'null') || {
+  week: 1, day: 1, totalReps: 0, totalWorkouts: 0, history: []
+};
+if (!state.history) state.history = [];
+
+let workout = { sets: [], currentSet: 0, results: [], currentReps: 1 };
+let timerInterval = null;
+let timerSeconds = 0;
+
+function save() { localStorage.setItem('marathon_state', JSON.stringify(state)); }
+function getSets(w, d) { return PLAN[`${w}-${d}`] || [1,1,1,1,1]; }
+function nextDay(w, d) {
+  d++; if (d > 3) { d = 1; w++; } if (w > 8) { w = 8; d = 3; }
+  return [w, d];
+}
+function sessionNumber() { return state.totalWorkouts + 1; }
+function formatDate(iso) {
+  const d = new Date(iso);
+  return `${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}`;
+}
+
+function updateHeader() {
+  document.getElementById('headerRight').textContent = `ЗАНЯТИЕ ${state.totalWorkouts + 1}`;
+}
+
+function updateSetsTrack(sets, current) {
+  const t = document.getElementById('setsTrack');
+  t.innerHTML = '';
+  sets.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'set-dot' + (i < current ? ' done' : i === current ? ' active' : '');
+    t.appendChild(d);
+  });
+}
+
+function renderChart() {
+  const wrap = document.getElementById('chartWrap');
+  const history = state.history;
+  if (!history || history.length === 0) {
+    wrap.innerHTML = '<div class="chart-empty">Тренировок пока нет</div>';
+    return;
+  }
+  const recent = history.slice(-10);
+  const maxVal = Math.max(...recent.map(h => h.total), 1);
+  const chartH = 80;
+
+  wrap.innerHTML = '';
+  const barsDiv = document.createElement('div');
+  barsDiv.className = 'chart-wrap';
+
+  recent.forEach(h => {
+    const col = document.createElement('div');
+    col.className = 'bar-col';
+
+    const val = document.createElement('div');
+    val.className = 'bar-val';
+    val.textContent = h.total;
+
+    const bar = document.createElement('div');
+    bar.className = 'bar';
+    const barH = Math.round((h.total / maxVal) * chartH);
+    bar.style.height = barH + 'px';
+
+    const date = document.createElement('div');
+    date.className = 'bar-date';
+    date.textContent = formatDate(h.date);
+
+    col.appendChild(val);
+    col.appendChild(bar);
+    col.appendChild(date);
+    barsDiv.appendChild(col);
+  });
+
+  wrap.appendChild(barsDiv);
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function goMenu() {
+  clearInterval(timerInterval);
+  const sets = getSets(state.week, state.day);
+  const num = state.totalWorkouts + 1;
+  document.getElementById('menuSessionLabel').textContent = `ЗАНЯТИЕ ${num}`;
+  document.getElementById('menuSets').textContent = sets.join(' · ');
+  document.getElementById('menuTotal').textContent = `= ${sets.reduce((a,b)=>a+b,0)} повторений`;
+  updateSetsTrack(sets, 0);
+  updateHeader();
+  renderChart();
+  showScreen('screenMenu');
+}
+
+function startWorkout() {
+  const sets = getSets(state.week, state.day);
+  workout = { sets, currentSet: 0, results: [], currentReps: sets[0] };
+  updateSetsTrack(sets, 0);
+  showSetScreen();
+  showScreen('screenWorkout');
+}
+
+function showSetScreen() {
+  const { sets, currentSet } = workout;
+  const target = sets[currentSet];
+  workout.currentReps = target;
+  document.getElementById('setLabel').textContent = `${currentSet + 1} из ${sets.length}`;
+  document.getElementById('doneSoFar').textContent = workout.results.reduce((a,b)=>a+b,0);
+  document.getElementById('workoutNum').textContent = target;
+  document.getElementById('workoutRing').style.strokeDashoffset = 0;
+  updateSetsTrack(sets, currentSet);
+  speakReps(target);
+}
+
+function adjustReps(delta) {
+  const newVal = Math.max(0, workout.currentReps + delta);
+  workout.currentReps = newVal;
+  document.getElementById('workoutNum').textContent = newVal;
+  if (tg) tg.HapticFeedback?.impactOccurred('light');
+}
+
+function markDone() {
+  const reps = workout.currentReps;
+  workout.results.push(reps);
+  workout.currentSet++;
+  if (tg) tg.HapticFeedback?.impactOccurred('medium');
+  if (workout.currentSet >= workout.sets.length) { finishWorkout(); return; }
+  showRestScreen(reps);
+}
+
+function showRestScreen(doneReps) {
+  const next = workout.sets[workout.currentSet];
+  document.getElementById('nextSetVal').textContent = `${next} повт.`;
+  updateSetsTrack(workout.sets, workout.currentSet);
+  showScreen('screenRest');
+  startTimer();
+}
+
+function startTimer() {
+  clearInterval(timerInterval);
+  timerSeconds = REST;
+  updateTimerUI(timerSeconds);
+  timerInterval = setInterval(() => {
+    timerSeconds--;
+    updateTimerUI(timerSeconds);
+    if (timerSeconds === 3 || timerSeconds === 2 || timerSeconds === 1) {
+      beepTick();
+      if (tg) tg.HapticFeedback?.impactOccurred('light');
+    }
+    if (timerSeconds <= 0) {
+      clearInterval(timerInterval);
+      beepReady();
+      if (tg) tg.HapticFeedback?.notificationOccurred('warning');
+      showSetScreen();
+      showScreen('screenWorkout');
+    }
+  }, 1000);
+}
+
+function updateTimerUI(sec) {
+  const progress = sec / REST;
+  document.getElementById('timerRing').style.strokeDashoffset = CIRC * (1 - progress);
+  document.getElementById('timerNum').textContent = sec;
+}
+
+function skipRest() {
+  clearInterval(timerInterval);
+  if (tg) tg.HapticFeedback?.impactOccurred('medium');
+  showSetScreen();
+  showScreen('screenWorkout');
+}
+
+function finishWorkout() {
+  clearInterval(timerInterval);
+  const total = workout.results.reduce((a,b)=>a+b,0);
+  const sessionNum = state.totalWorkouts + 1;
+
+  state.totalReps += total;
+  state.totalWorkouts++;
+  state.history.push({ session: sessionNum, total, date: new Date().toISOString() });
+
+  const [nw, nd] = nextDay(state.week, state.day);
+  state.week = nw; state.day = nd;
+  save();
+
+  document.getElementById('finishTotal').textContent = total;
+  const sr = document.getElementById('setsResult');
+  sr.innerHTML = '';
+  workout.results.forEach(r => {
+    const p = document.createElement('div');
+    p.className = 'set-result-pill';
+    p.textContent = r;
+    sr.appendChild(p);
+  });
+
+  const nextSets = getSets(nw, nd);
+  document.getElementById('nextWorkoutLabel').textContent = `Занятие ${state.totalWorkouts + 1}`;
+  document.getElementById('nextSetsPreview').textContent = nextSets.join('·');
+  updateSetsTrack(workout.sets, workout.sets.length);
+  updateHeader();
+  showScreen('screenFinish');
+  if (tg) tg.HapticFeedback?.notificationOccurred('success');
+}
+
+goMenu();
+</script>
+</body>
+</html>
